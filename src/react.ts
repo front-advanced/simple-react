@@ -1,27 +1,26 @@
 interface Props {
   [key: string]: any;
+  children?: Element | Element[];
 }
 
 interface Element {
-  type: string;
+  type: string | Function;
   props: Props;
 }
 
-export function createElement(type: string, props: Props | null, ...children: any[]): Element {
+export function createElement(type: string | Function, props: Props | null, ...children: any[]): Element {
   return {
     type,
     props: {
       ...props,
       children: children.map(child =>
-        typeof child === "object"
-          ? child
-          : createTextElement(child)
-      ),
+        typeof child === "object" ? child : createTextElement(child)
+      ).flat(),
     },
   };
 }
 
-function createTextElement(text: string): Element {
+function createTextElement(text: string | number): Element {
   return {
     type: "TEXT_ELEMENT",
     props: {
@@ -31,20 +30,42 @@ function createTextElement(text: string): Element {
   };
 }
 
-export function render(element: Element, container: HTMLElement | Text) {
-  const dom = element.type === "TEXT_ELEMENT"
-    ? document.createTextNode("")
-    : document.createElement(element.type);
+function isElement(child: any): child is Element {
+  return typeof child === "object" && "type" in child;
+}
 
+export function render(element: Element, container: HTMLElement | Text) {
+  if (typeof element.type === "function") {
+    const componentElement = element.type({
+      ...element.props,
+      children: element.props.children || [],
+    });
+    render(componentElement, container);
+    return;
+  }
+
+  const dom = 
+    element.type === "TEXT_ELEMENT"
+      ? document.createTextNode("")
+      : document.createElement(element.type as string);
+
+  const isProperty = (key: string) => key !== "children";
   Object.keys(element.props)
-    .filter(key => key !== "children")
+    .filter(isProperty)
     .forEach(name => {
       (dom as any)[name] = element.props[name];
     });
 
-  element.props.children.forEach((child: Element) =>
-    render(child, dom)
-  );
+  const children = element.props.children || [];
+  if (Array.isArray(children)) {
+    children.forEach(child => {
+      if (isElement(child)) {
+        render(child, dom);
+      }
+    });
+  } else if (isElement(children)) {
+    render(children, dom);
+  }
 
   container.appendChild(dom);
 }

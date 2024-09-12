@@ -69,3 +69,35 @@ describe('render', () => {
     expect(container.innerHTML).toBe('<div><span>Hello</span> World</div>');
   });
 });
+
+describe('Components and Props', () => {
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+  });
+
+  it('renders a functional component', () => {
+    function App(props: { name: string }) {
+      return createElement('h1', null, `Hello, ${props.name}`);
+    }
+    const element = createElement(App, { name: 'World' });
+    render(element, container);
+    expect(container.innerHTML).toBe('<h1>Hello, World</h1>');
+  });
+
+  it('renders a component with children', () => {
+    function Parent(props: { children: any }) {
+      return createElement('div', null, props.children);
+    }
+    const element = createElement(
+      Parent,
+      null,
+      createElement('span', null, 'Child 1'),
+      createElement('span', null, 'Child 2')
+    );
+    render(element, container);
+    expect(container.innerHTML).toBe('<div><span>Child 1</span><span>Child 2</span></div>');
+  });
+});
