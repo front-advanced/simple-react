@@ -32,6 +32,19 @@ function createTextElement(text: string): Element {
 }
 
 export function render(element: Element, container: HTMLElement | Text) {
-  console.log("Rendering element:", element);
-  console.log("Into container:", container);
+  const dom = element.type === "TEXT_ELEMENT"
+    ? document.createTextNode("")
+    : document.createElement(element.type);
+
+  Object.keys(element.props)
+    .filter(key => key !== "children")
+    .forEach(name => {
+      (dom as any)[name] = element.props[name];
+    });
+
+  element.props.children.forEach((child: Element) =>
+    render(child, dom)
+  );
+
+  container.appendChild(dom);
 }

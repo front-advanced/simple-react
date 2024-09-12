@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { createElement } from '../src/react';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createElement, render } from '../src/react';
 
 describe('createElement', () => {
   it('creates a simple element', () => {
@@ -43,5 +43,29 @@ describe('createElement', () => {
         ],
       },
     });
+  });
+});
+
+describe('render', () => {
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+  });
+
+  it('renders a simple element', () => {
+    const element = createElement('div', { id: 'test' });
+    render(element, container);
+    expect(container.innerHTML).toBe('<div id="test"></div>');
+  });
+
+  it('renders an element with children', () => {
+    const element = createElement('div', null,
+      createElement('span', null, 'Hello'),
+      ' World'
+    );
+    render(element, container);
+    expect(container.innerHTML).toBe('<div><span>Hello</span> World</div>');
   });
 });
