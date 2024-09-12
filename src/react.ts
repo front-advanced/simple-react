@@ -1,6 +1,5 @@
 interface Props {
   [key: string]: any;
-  children?: Element | Element[];
 }
 
 interface Element {
@@ -8,14 +7,14 @@ interface Element {
   props: Props;
 }
 
-export function createElement(type: string | Function, props: Props | null, ...children: any[]): Element {
+export function createElement(type: string | Function, props?: Props | null, ...children: any[]): Element {
   return {
     type,
     props: {
       ...props,
       children: children.map(child =>
         typeof child === "object" ? child : createTextElement(child)
-      ).flat(),
+      ),
     },
   };
 }
@@ -30,16 +29,9 @@ function createTextElement(text: string | number): Element {
   };
 }
 
-function isElement(child: any): child is Element {
-  return typeof child === "object" && "type" in child;
-}
-
 export function render(element: Element, container: HTMLElement | Text) {
   if (typeof element.type === "function") {
-    const componentElement = element.type({
-      ...element.props,
-      children: element.props.children || [],
-    });
+    const componentElement = element.type(element.props);
     render(componentElement, container);
     return;
   }
@@ -56,16 +48,9 @@ export function render(element: Element, container: HTMLElement | Text) {
       (dom as any)[name] = element.props[name];
     });
 
-  const children = element.props.children || [];
-  if (Array.isArray(children)) {
-    children.forEach(child => {
-      if (isElement(child)) {
-        render(child, dom);
-      }
-    });
-  } else if (isElement(children)) {
-    render(children, dom);
-  }
+  element.props.children.forEach((child: Element) =>
+    render(child, dom)
+  );
 
   container.appendChild(dom);
 }

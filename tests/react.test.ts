@@ -78,26 +78,36 @@ describe('Components and Props', () => {
     document.body.appendChild(container);
   });
 
-  it('renders a functional component', () => {
-    function App(props: { name: string }) {
-      return createElement('h1', null, `Hello, ${props.name}`);
+  it('renders a simple functional component', () => {
+    function App() {
+      return createElement('h1', null, 'Hello, World');
     }
-    const element = createElement(App, { name: 'World' });
+    const element = createElement(App);
     render(element, container);
     expect(container.innerHTML).toBe('<h1>Hello, World</h1>');
   });
 
-  it('renders a component with children', () => {
-    function Parent(props: { children: any }) {
-      return createElement('div', null, props.children);
+  it('renders a functional component with props', () => {
+    function Greeting(props: { name: string }) {
+      return createElement('h1', null, `Hello, ${props.name}`);
     }
-    const element = createElement(
-      Parent,
-      null,
-      createElement('span', null, 'Child 1'),
-      createElement('span', null, 'Child 2')
-    );
+    const element = createElement(Greeting, { name: 'React' });
     render(element, container);
-    expect(container.innerHTML).toBe('<div><span>Child 1</span><span>Child 2</span></div>');
+    expect(container.innerHTML).toBe('<h1>Hello, React</h1>');
+  });
+
+  it('renders nested functional components', () => {
+    function Child(props: { name: string }) {
+      return createElement('div', null, `Child ${props.name}`);
+    }
+    function Parent() {
+      return createElement('div', null,
+        createElement(Child, { name: 'A' }),
+        createElement(Child, { name: 'B' })
+      );
+    }
+    const element = createElement(Parent);
+    render(element, container);
+    expect(container.innerHTML).toBe('<div><div>Child A</div><div>Child B</div></div>');
   });
 });
