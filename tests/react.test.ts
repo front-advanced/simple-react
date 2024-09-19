@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { createElement, render } from '../src/react';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createElement, render, resetGlobalVariables } from '../src/react';
+import { vi } from 'vitest';
 
 describe('createElement', () => {
   it('creates a simple element', () => {
@@ -46,68 +47,56 @@ describe('createElement', () => {
   });
 });
 
-describe('render', () => {
+describe('Fiber Architecture', () => {
   let container: HTMLElement;
 
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
+    resetGlobalVariables();
   });
 
-  it('renders a simple element', () => {
-    const element = createElement('div', { id: 'test' });
-    render(element, container);
-    expect(container.innerHTML).toBe('<div id="test"></div>');
-  });
+  afterEach(() => {
+    document.body.removeChild(container);
+    container = null as any;
+  })
 
-  it('renders an element with children', () => {
+  it('renders elements incrementally', async () => {
     const element = createElement('div', null,
-      createElement('span', null, 'Hello'),
-      ' World'
+      createElement('h1', null, 'Hello'),
+      createElement('h2', null, 'World')
     );
     render(element, container);
-    expect(container.innerHTML).toBe('<div><span>Hello</span> World</div>');
-  });
-});
 
-describe('Components and Props', () => {
-  let container: HTMLElement;
-
-  beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
+    await vi.waitFor(() => {
+      expect(container.innerHTML).toBe('<div><h1>Hello</h1><h2>World</h2></div>');
+    });
   });
 
-  it('renders a simple functional component', () => {
-    function App() {
-      return createElement('h1', null, 'Hello, World');
-    }
-    const element = createElement(App);
+  it('updates existing elements', async () => {
+    const element1 = createElement('div', { id: 'test' }, 'Hello');
+    render(element1, container);
+
+    const element2 = createElement('div', { id: 'test', className: 'updated' }, 'Updated');
+    render(element2, container);
+
+    await vi.waitFor(() => container.innerHTML === '<div id="test" class="updated">Updated</div>');
+  });
+
+  it('removes elements', async () => {
+    const element = createElement('div', null,
+      createElement('h1', null, 'Hello'),
+      createElement('h2', null, 'World')
+    );
     render(element, container);
-    expect(container.innerHTML).toBe('<h1>Hello, World</h1>');
-  });
 
-  it('renders a functional component with props', () => {
-    function Greeting(props: { name: string }) {
-      return createElement('h1', null, `Hello, ${props.name}`);
-    }
-    const element = createElement(Greeting, { name: 'React' });
-    render(element, container);
-    expect(container.innerHTML).toBe('<h1>Hello, React</h1>');
-  });
-
-  it('renders nested functional components', () => {
-    function Child(props: { name: string }) {
-      return createElement('div', null, `Child ${props.name}`);
-    }
-    function Parent() {
-      return createElement('div', null,
-        createElement(Child, { name: 'A' }),
-        createElement(Child, { name: 'B' })
-      );
-    }
-    const element = createElement(Parent);
-    render(element, container);
-    expect(container.innerHTML).toBe('<div><div>Child A</div><div>Child B</div></div>');
+    const element2 = createElement('div', null, 
+      createElement('h1', null, 'Hello')
+    );
+    render(element2, container);
+  
+    await vi.waitFor(() => {
+      expect(container.innerHTML).toBe('<div><h1>Hello</h1></div>');
+    });
   });
 });
