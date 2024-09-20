@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createElement, render, resetGlobalVariables } from '../src/react';
+import { createElement, render, resetGlobalVariables, useState } from '../src/react';
 import { vi } from 'vitest';
 
 describe('createElement', () => {
@@ -97,6 +97,78 @@ describe('Fiber Architecture', () => {
   
     await vi.waitFor(() => {
       expect(container.innerHTML).toBe('<div><h1>Hello</h1></div>');
+    });
+  });
+});
+
+describe('useState hook', () => {
+
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    resetGlobalVariables();
+  });
+
+  it('should update state and re-render', async () => {
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return createElement(
+        'div',
+        null,
+        createElement('p', null, `Count: ${count}`),
+        createElement('button', { onClick: () => setCount(c => c + 1) }, 'Increment')
+      );
+    }
+
+    const element = createElement(Counter);
+    render(element, container);
+
+    await vi.waitFor(() => {
+      expect(container.innerHTML).toBe('<div><p>Count: 0</p><button>Increment</button></div>');
+    });
+
+    const button = container.querySelector('button');
+    button!.click();
+
+    await vi.waitFor(() => {
+      expect(container.innerHTML).toBe('<div><p>Count: 1</p><button>Increment</button></div>');
+    });
+  });
+
+  it('should handle multiple state hooks', async () => {
+    function TwoCounters() {
+      const [count1, setCount1] = useState(0);
+      const [count2, setCount2] = useState(10);
+      return createElement(
+        'div',
+        null,
+        createElement('p', null, `Count1: ${count1}`),
+        createElement('button', { onClick: () => setCount1(c => c + 1) }, 'Increment1'),
+        createElement('p', null, `Count2: ${count2}`),
+        createElement('button', { onClick: () => setCount2(c => c + 1) }, 'Increment2')
+      );
+    }
+
+    const element = createElement(TwoCounters);
+    render(element, container);
+
+   await vi.waitFor(() => {
+      expect(container.innerHTML).toBe('<div><p>Count1: 0</p><button>Increment1</button><p>Count2: 10</p><button>Increment2</button></div>');
+   });
+
+    const buttons = container.querySelectorAll('button');
+    buttons[0].click();
+
+    await vi.waitFor(() => {
+      expect(container.innerHTML).toBe('<div><p>Count1: 1</p><button>Increment1</button><p>Count2: 10</p><button>Increment2</button></div>');
+    });
+
+    buttons[1].click();
+
+    await vi.waitFor(() => {
+      expect(container.innerHTML).toBe('<div><p>Count1: 1</p><button>Increment1</button><p>Count2: 11</p><button>Increment2</button></div>');
     });
   });
 });

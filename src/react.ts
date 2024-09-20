@@ -41,6 +41,7 @@ interface Fiber {
   sibling: Fiber | null;
   alternate: Fiber | null;
   effectTag?: 'UPDATE' | 'PLACEMENT' | 'DELETION';
+  stateHooks?: any[] | null;
 }
 
 let nextUnitOfWork: Fiber | null = null;
@@ -48,12 +49,54 @@ let wipRoot: Fiber | null = null;
 let currentRoot: Fiber | null = null;
 let deletions: Fiber[] | null = null;
 
+let wipFiber: Fiber | null = null;
+let stateHookIndex: number | null = null;
+
 export function resetGlobalVariables() {
   nextUnitOfWork = null;
   wipRoot = null;
   currentRoot = null;
   deletions = null;
+  wipFiber = null;
+  stateHookIndex = null;
 }
+
+export function useState<T>(
+  initialState: T
+): [T, (action: T | ((prevState: T) => T)) => void] {
+  const currentFiber = wipFiber!;
+
+  const oldHook = wipFiber!.alternate?.stateHooks![stateHookIndex!];
+
+  const stateHook = {
+    state: oldHook ? oldHook.state : initialState,
+    queue: oldHook ? oldHook.queue : [],
+  };
+
+  stateHook.queue.forEach((action: (state: T) => T) => {
+    stateHook.state = action(stateHook.state);
+  });
+
+  stateHook.queue = [];
+
+  stateHookIndex!++;
+  wipFiber!.stateHooks!.push(stateHook);
+
+  function setState(action: T | ((prevState: T) => T)) {
+    const isFunction = typeof action === "function";
+
+    stateHook.queue.push(isFunction ? action : () => action);
+
+    wipRoot = {
+      ...currentFiber,
+      alternate: currentFiber,
+    };
+    nextUnitOfWork = wipRoot;
+  }
+
+  return [stateHook.state, setState];
+}
+
 
 const requestIdleCallback = window.requestIdleCallback ?? simulateRequestIdleCallback;
 
@@ -73,13 +116,12 @@ function workLoop(deadline: IdleDeadline) {
 
 
 function performUnitOfWork(fiber: Fiber): Fiber | null {
-  if (!fiber.dom) {
-    fiber.dom = createDom(fiber);
+  const isFunctionComponent = fiber.type instanceof Function;
+  if (isFunctionComponent) {
+    updateFunctionComponent(fiber);
+  } else {
+    updateHostComponent(fiber);
   }
-
-  const elements = fiber.props.children;
-  reconcileChildren(fiber, elements);
-
   if (fiber.child) {
     return fiber.child;
   }
@@ -93,6 +135,21 @@ function performUnitOfWork(fiber: Fiber): Fiber | null {
   return null;
 }
 
+function updateFunctionComponent(fiber: Fiber) {
+  wipFiber = fiber;
+  stateHookIndex = 0;
+  wipFiber.stateHooks = [];
+
+  const children = [(fiber.type as Function)(fiber.props)];
+  reconcileChildren(fiber, children);
+}
+
+function updateHostComponent(fiber: Fiber) {
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber);
+  }
+  reconcileChildren(fiber, fiber.props.children);
+}
 
 function createDom(fiber: Fiber): HTMLElement | Text {
   const dom =
@@ -215,4 +272,3 @@ export function render(element: Element, container: HTMLElement | Text) {
 }
 
 requestIdleCallback(workLoop);
-
