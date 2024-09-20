@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createElement, render, resetGlobalVariables, useEffect, useState } from '../src/react';
+import { batchedUpdates, createElement, memo, render, resetGlobalVariables, useEffect, useState } from '../src/react';
 import { vi } from 'vitest';
 
 describe('createElement', () => {
@@ -265,7 +265,6 @@ describe('useEffect hook', () => {
         createElement(
           'button',
           { onClick: () => {
-            console.log('click');
             setShow(false);
           } },
           'Hide'
@@ -284,6 +283,113 @@ describe('useEffect hook', () => {
 
     await vi.waitFor(() => {
       expect(cleanupMock).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+describe('memo optimization', () => {
+  let container: HTMLElement;
+  let renderCount: number;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    resetGlobalVariables();
+    renderCount = 0;
+  });
+
+  afterEach(() => {
+    document.body.removeChild(container);
+    container = null as any;
+  });
+
+  it('should prevent unnecessary re-renders', async () => {
+    const ChildComponent = memo(({ text }: { text: string }) => {
+      renderCount++;
+      return createElement('p', null, text);
+    });
+
+    function ParentComponent() {
+      const [count, setCount] = useState(0);
+      return createElement(
+        'div',
+        null,
+        createElement(ChildComponent, { text: 'Hello' }),
+        createElement('button', { onClick: () => setCount(c => c + 1) }, `Count: ${count}`)
+      );
+    }
+
+    const element = createElement(ParentComponent);
+    render(element, container);
+
+    await vi.waitFor(() => {
+      expect(container.innerHTML).toBe('<div><p>Hello</p><button>Count: 0</button></div>');
+      expect(renderCount).toBe(1);
+    });
+
+    const button = container.querySelector('button');
+    button!.click();
+
+    await vi.waitFor(() => {
+      expect(container.innerHTML).toBe('<div><p>Hello</p><button>Count: 1</button></div>');
+      // ChildComponent should not re-render
+      expect(renderCount).toBe(1);
+    });
+
+    // Change props to force re-render
+    const newElement = createElement(ParentComponent);
+    render(newElement, container);
+
+    await vi.waitFor(() => {
+      expect(renderCount).toBe(2);
+    });
+  });
+});
+
+describe('Batched updates', () => {
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    resetGlobalVariables();
+  });
+
+  afterEach(() => {
+    document.body.removeChild(container);
+    container = null as any;
+  })
+
+  it('should batch multiple state updates', async () => {
+    let renderCount = 0;
+
+    function Counter() {
+      const [count, setCount] = useState(0);
+      renderCount++;
+      return createElement('div', null,
+        createElement('p', null, `Count: ${count}`),
+        createElement('button', {
+          onClick: () => batchedUpdates(() => {
+            setCount(c => c + 1);
+            setCount(c => c + 1);
+            setCount(c => c + 1);
+          })
+        }, 'Increment')
+      );
+    }
+
+    render(createElement(Counter), container);
+
+    await vi.waitFor(() => {
+      expect(container.innerHTML).toBe('<div><p>Count: 0</p><button>Increment</button></div>');
+      expect(renderCount).toBe(1);
+    });
+
+    container.querySelector('button')!.click();
+
+    await vi.waitFor(() => {
+      expect(container.innerHTML).toBe('<div><p>Count: 3</p><button>Increment</button></div>');
+      expect(renderCount).toBe(2); 
     });
   });
 });

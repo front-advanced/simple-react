@@ -62,6 +62,25 @@ export function resetGlobalVariables() {
   stateHookIndex = null;
 }
 
+let isBatchingUpdates = false;
+const updateQueue: (() => void)[] = [];
+
+export function batchedUpdates(fn: () => void) {
+  const prevIsBatchingUpdates = isBatchingUpdates;
+  isBatchingUpdates = true;
+  try {
+    fn();
+  } finally {
+    isBatchingUpdates = prevIsBatchingUpdates;
+    if (!isBatchingUpdates) {
+      while (updateQueue.length > 0) {
+        const update = updateQueue.shift();
+        update!();
+      }
+    }
+  }
+}
+
 export function useState<T>(
   initialState: T
 ): [T, (action: T | ((prevState: T) => T)) => void] {
@@ -84,15 +103,23 @@ export function useState<T>(
   wipFiber!.stateHooks!.push(stateHook);
 
   function setState(action: T | ((prevState: T) => T)) {
-    const isFunction = typeof action === "function";
+    const update = () => {
+      const isFunction = typeof action === "function";
 
-    stateHook.queue.push(isFunction ? action : () => action);
+      stateHook.queue.push(isFunction ? action : () => action);
+  
+      wipRoot = {
+        ...currentFiber,
+        alternate: currentFiber,
+      };
+      nextUnitOfWork = wipRoot;
+    }
 
-    wipRoot = {
-      ...currentFiber,
-      alternate: currentFiber,
-    };
-    nextUnitOfWork = wipRoot;
+    if (isBatchingUpdates) {
+      updateQueue.push(update);
+    } else {
+      update();
+    }
   }
 
   return [stateHook.state, setState];
@@ -343,3 +370,37 @@ export function render(element: Element, container: HTMLElement | Text) {
 }
 
 requestIdleCallback(workLoop);
+
+export function memo<P extends object>(
+  Component: (props: P) => Element,
+  propsAreEqual: (prevProps: P, nextProps: P) => boolean = shallowEqual
+): (props: P) => Element {
+  return (props: P) => {
+    const fiber = wipFiber!;
+    const oldProps = fiber.alternate?.props;
+    
+    if (oldProps && propsAreEqual(oldProps as P, props)) {
+      return fiber.alternate!.child!;
+    }
+    
+    return Component(props);
+  };
+}
+
+function shallowEqual(obj1: any, obj2: any): boolean {
+  if (obj1 === obj2) return true;
+  if (typeof obj1 !== 'object' || obj1 === null ||
+      typeof obj2 !== 'object' || obj2 === null) {
+    return false;
+  }
+  const keys1 = Object.keys(obj1);
+  const keys2 = Object.keys(obj2);
+  if (keys1.length !== keys2.length) return false;
+  for (let key of keys1) {
+    if (key === 'children') continue; // Skip comparing children
+    if (!obj2.hasOwnProperty(key) || obj1[key] !== obj2[key]) {
+      return false;
+    }
+  }
+  return true;
+}
