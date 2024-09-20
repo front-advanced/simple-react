@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createElement, render, resetGlobalVariables, useState } from '../src/react';
+import { createElement, render, resetGlobalVariables, useEffect, useState } from '../src/react';
 import { vi } from 'vitest';
 
 describe('createElement', () => {
@@ -111,6 +111,11 @@ describe('useState hook', () => {
     resetGlobalVariables();
   });
 
+  afterEach(() => {
+    document.body.removeChild(container);
+    container = null as any;
+  })
+
   it('should update state and re-render', async () => {
     function Counter() {
       const [count, setCount] = useState(0);
@@ -169,6 +174,116 @@ describe('useState hook', () => {
 
     await vi.waitFor(() => {
       expect(container.innerHTML).toBe('<div><p>Count1: 1</p><button>Increment1</button><p>Count2: 11</p><button>Increment2</button></div>');
+    });
+  });
+});
+
+describe('useEffect hook', () => {
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    resetGlobalVariables();
+  });
+
+  afterEach(() => {
+    document.body.removeChild(container);
+    container = null as any;
+  })
+
+  it('should run effect after render', async () => {
+    const effectMock = vi.fn();
+
+    function EffectComponent() {
+      useEffect(effectMock);
+      return createElement('div', null, 'Effect Test');
+    }
+
+    const element = createElement(EffectComponent);
+    render(element, container);
+
+    await vi.waitFor(() => {
+      expect(effectMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('should run effect only when dependencies change', async () => {
+    const effectMock = vi.fn();
+
+    function EffectComponent({ dep }: { dep: number }) {
+      const [state, setState] = useState(dep);
+      useEffect(effectMock, [state]);
+
+      return createElement(
+        'div',
+        null,
+        createElement('span', null, `Dep: ${state}`),
+        createElement(
+          'button',
+          { onClick: () => setState(prev => prev + 1) },
+          'Increment'
+        )
+      );
+    }
+
+    const element = createElement(EffectComponent, { dep: 1 });
+    render(element, container);
+
+    await vi.waitFor(() => {
+      expect(effectMock).toHaveBeenCalledTimes(1);
+    });
+
+    // Simulate a click to change the dependency
+    container.querySelector('button')?.click();
+
+    await vi.waitFor(() => {
+      expect(effectMock).toHaveBeenCalledTimes(2);
+    });
+
+    // Simulate another click to change the dependency again
+    container.querySelector('button')?.click();
+
+    await vi.waitFor(() => {
+      expect(effectMock).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  it('should cleanup effect', async () => {
+    const cleanupMock = vi.fn();
+
+    function CleanupComponent() {
+      const [, setShow] = useState(true);
+      
+      useEffect(() => {
+        return cleanupMock;
+      });
+
+      return createElement(
+        'div',
+        null,
+        createElement(
+          'button',
+          { onClick: () => {
+            console.log('click');
+            setShow(false);
+          } },
+          'Hide'
+        )
+      );
+    }
+
+    const element = createElement(CleanupComponent);
+    render(element, container);
+
+    await vi.waitFor(() => {
+      expect(container.innerHTML).toBe('<div><button>Hide</button></div>');
+    })
+
+    container.querySelector('button')?.click();
+
+    await vi.waitFor(() => {
+      expect(cleanupMock).toHaveBeenCalledTimes(1);
     });
   });
 });

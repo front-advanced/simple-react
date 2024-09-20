@@ -42,6 +42,7 @@ interface Fiber {
   alternate: Fiber | null;
   effectTag?: 'UPDATE' | 'PLACEMENT' | 'DELETION';
   stateHooks?: any[] | null;
+  effectHooks?: any[] | null;
 }
 
 let nextUnitOfWork: Fiber | null = null;
@@ -97,6 +98,14 @@ export function useState<T>(
   return [stateHook.state, setState];
 }
 
+export function useEffect(callback: () => void | (() => void), deps?: any[]) {
+  const effectHook = {
+    callback,
+    deps,
+    cleanup: undefined as (() => void) | undefined,
+  };
+  wipFiber!.effectHooks!.push(effectHook);
+}
 
 const requestIdleCallback = window.requestIdleCallback ?? simulateRequestIdleCallback;
 
@@ -139,6 +148,7 @@ function updateFunctionComponent(fiber: Fiber) {
   wipFiber = fiber;
   stateHookIndex = 0;
   wipFiber.stateHooks = [];
+  wipFiber.effectHooks = [];
 
   const children = [(fiber.type as Function)(fiber.props)];
   reconcileChildren(fiber, children);
@@ -220,8 +230,69 @@ function reconcileChildren(wipFiber: Fiber, elements: Element[]) {
 function commitRoot() {
   deletions!.forEach(commitWork);
   commitWork(wipRoot!.child);
+  commitEffectHooks();
   currentRoot = wipRoot;
   wipRoot = null;
+  deletions = [];
+}
+
+function isDepsEqual(deps: any[], newDeps: any[]) {
+  if (deps.length !== newDeps.length) {
+    return false;
+  }
+
+  for (let i = 0; i < deps.length; i++) {
+    if (deps[i] !== newDeps[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function commitEffectHooks() {
+  function runCleanup(fiber: Fiber | null) {
+    if (!fiber) return;
+
+    fiber.alternate?.effectHooks?.forEach((hook, index) => {
+      const deps = fiber.effectHooks![index].deps;
+
+      if (!hook.deps || !isDepsEqual(hook.deps, deps!)) {
+        hook.cleanup?.();
+      }
+    });
+
+    runCleanup(fiber.child);
+    runCleanup(fiber.sibling);
+  }
+
+  function run(fiber: Fiber | null) {
+    if (!fiber) return;
+
+    fiber.effectHooks?.forEach((newHook, index) => {
+      if (!fiber.alternate) {
+        newHook.cleanup = newHook.callback();
+        return;
+      }
+
+      if (!newHook.deps) {
+        newHook.cleanup = newHook.callback();
+      }
+
+      if (newHook.deps && newHook.deps.length > 0) {
+        const oldHook = fiber.alternate?.effectHooks![index];
+
+        if (!isDepsEqual(oldHook.deps!, newHook.deps!)) {
+          newHook.cleanup = newHook.callback();
+        }
+      }
+    });
+
+    run(fiber.child);
+    run(fiber.sibling);
+  }
+
+  runCleanup(wipRoot);
+  run(wipRoot);
 }
 
 function commitWork(fiber: Fiber | null) {
